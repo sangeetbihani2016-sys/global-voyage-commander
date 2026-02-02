@@ -6,6 +6,43 @@ import random
 # --- CONFIGURATION ---
 st.set_page_config(page_title="Global Voyage Commander", layout="wide")
 
+# --- CUSTOM CSS FOR DARK AESTHETIC ---
+st.markdown("""
+    <style>
+    /* Dark Theme Tweaks */
+    .stApp {
+        background-color: #0E1117;
+    }
+    /* Metric Cards */
+    div[data-testid="stMetricValue"] {
+        font-size: 26px;
+        color: #00CC96; /* Green Neon */
+    }
+    div[data-testid="stMetricLabel"] {
+        font-size: 14px;
+        color: #888;
+    }
+    /* Custom Box for Alternative */
+    .alt-box {
+        border: 1px solid #333;
+        border-radius: 10px;
+        padding: 15px;
+        background-color: #191c24;
+        margin-top: 10px;
+    }
+    .alt-title {
+        color: #FFA15A;
+        font-weight: bold;
+        font-size: 16px;
+        margin-bottom: 5px;
+    }
+    .alt-text {
+        color: #ccc;
+        font-size: 14px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
 # --- 1. DATA ASSETS ---
 PORTS_DB = {
     # --- ASIA ---
@@ -95,7 +132,7 @@ st.divider()
 # --- 2. THE OPTIMIZER ENGINE ---
 strategies = []
 
-# Dynamic Logic: "Standard" uses user slider, "Eco" is 11kts (or 10 if slider is lower)
+# Dynamic Logic
 eco_speed_target = 11.0 if base_speed > 11.0 else 10.0
 
 scenarios = [
@@ -106,7 +143,9 @@ scenarios = [
 
 # Multimodal Logic
 hub_port = find_best_hub(origin_port, dest_port)
+has_multimodal = False
 if hub_port:
+    has_multimodal = True
     scenarios.append({
         "Name": f"Re-export via {hub_port.split(' ')[0]}", 
         "Speed": 14.5, "Fuel": "VLSFO", "Bio": False, "Type": "Multimodal", "Hub": hub_port
@@ -155,11 +194,25 @@ for sc in scenarios:
         "TCE": tce,
         "Total Cost": total_cost,
         "Carbon Tax": final_tax,
+        "Type": sc['Type'],
         "Details": "Transshipment" if sc['Type'] == "Multimodal" else "Direct Sea"
     })
 
 df_strat = pd.DataFrame(strategies).sort_values(by="Net Profit", ascending=False)
 best_strat = df_strat.iloc[0]
+
+# Identify the "Alternative"
+# If winner is Multimodal, alt is Direct. If winner is Direct, alt is Multimodal (if exists).
+alternative_strat = None
+if best_strat['Type'] == 'Multimodal':
+    # Find best Direct
+    alternative_strat = df_strat[df_strat['Type'] == 'Direct'].iloc[0]
+elif has_multimodal:
+    # Find Multimodal
+    alternative_strat = df_strat[df_strat['Type'] == 'Multimodal'].iloc[0]
+else:
+    # Just the runner up
+    alternative_strat = df_strat.iloc[1]
 
 # --- 3. VISUALIZATION CENTER ---
 c1, c2 = st.columns([2, 1])
@@ -167,23 +220,34 @@ c1, c2 = st.columns([2, 1])
 with c1:
     st.subheader("📊 Financial Performance Comparison")
     
-    # Original Color Scheme
+    # Clean Color Scheme
     color_map = {
         f"Selected Speed ({base_speed}kts)": "#00CC96", # Greenish/Teal
         f"Eco-Steaming ({eco_speed_target}kts)": "#636EFA", # Purple/Blue
         "Green Corridor (Bio)": "#EF553B" # Red/Orange
     }
-    # Dynamic Multimodal color
     for s in strategies:
         if "Re-export" in s['Strategy']: color_map[s['Strategy']] = "#FFA15A" # Orange
 
     fig = px.bar(df_strat, x="Strategy", y="Net Profit", 
-                 title="Net Profit by Strategy",
                  color="Strategy", 
                  color_discrete_map=color_map,
                  text_auto='.2s')
     
-    fig.update_layout(height=350, margin=dict(l=20, r=20, t=40, b=20))
+    # SLIM & CLEAN GRAPH
+    fig.update_layout(
+        height=280, # Slimmer
+        margin=dict(l=0, r=0, t=20, b=0),
+        xaxis_title=None, # Remove "Strategy" text
+        yaxis_title="Net Profit ($)",
+        showlegend=False, # Remove Legend (Redundant with Axis)
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        font=dict(color='#ccc')
+    )
+    # Customize Hover
+    fig.update_traces(hovertemplate='<b>%{x}</b><br>Profit: $%{y:,.0f}<extra></extra>')
+    
     st.plotly_chart(fig, use_container_width=True)
 
 with c2:
@@ -192,24 +256,40 @@ with c2:
     top_strat_name = best_strat['Strategy']
     speed_diff = best_strat['Speed'] - base_speed
     
+    # Recommendation Logic
+    rec_title = ""
+    rec_text = ""
+    
     if "Re-export" in top_strat_name:
-        st.success(f"**STRATEGY: MULTIMODAL**")
+        rec_title = "GO MULTIMODAL"
         hub_name = top_strat_name.split("via ")[1]
-        st.write(f"Routing via **{hub_name}** is the winner. Tax savings & cheaper fuel outweigh the handling costs.")
-        
+        rec_text = f"Route via **{hub_name}**. Tax & Fuel savings outweigh handling costs."
     elif abs(speed_diff) < 0.5:
-        st.info(f"**STRATEGY: MAINTAIN SPEED**")
-        st.write(f"Your selected speed of **{base_speed} kts** is optimal.")
-        
+        rec_title = "MAINTAIN SPEED"
+        rec_text = f"Your input of **{base_speed} kts** is optimal."
     elif speed_diff < 0:
-        st.success(f"**STRATEGY: SLOW DOWN**")
-        st.write(f"Reduce speed to **{best_strat['Speed']} kts**. Fuel savings > Time lost.")
-        
+        rec_title = "SLOW DOWN"
+        rec_text = f"Reduce to **{best_strat['Speed']} kts** to save fuel."
     else:
-        st.warning(f"**STRATEGY: SPEED UP**")
-        st.write(f"Increase speed to **{best_strat['Speed']} kts**. High freight rates justify burning more fuel.")
+        rec_title = "SPEED UP"
+        rec_text = f"Increase to **{best_strat['Speed']} kts** for higher turnover."
 
+    st.success(f"**STRATEGY: {rec_title}**")
+    st.write(rec_text)
     st.metric("Optimal TCE", f"${best_strat['TCE']:,.0f} / day")
+
+    # --- BEST ALTERNATIVE BOX ---
+    if alternative_strat is not None:
+        diff_profit = best_strat['Net Profit'] - alternative_strat['Net Profit']
+        st.markdown(f"""
+        <div class="alt-box">
+            <div class="alt-title">🔄 Best Alternative Route</div>
+            <div class="alt-text"><b>{alternative_strat['Strategy']}</b></div>
+            <div style="font-size: 12px; color: #888; margin-top:5px;">
+                Profit Gap: -${diff_profit:,.0f} vs Winner
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
 # --- 4. DATA TABLE ---
 st.markdown("### 📋 Detailed Voyage P&L")
