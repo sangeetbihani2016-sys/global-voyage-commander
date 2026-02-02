@@ -6,46 +6,23 @@ import random
 # --- CONFIGURATION ---
 st.set_page_config(page_title="Global Voyage Commander", layout="wide")
 
-# --- CUSTOM CSS FOR DARK AESTHETIC ---
+# --- CUSTOM CSS ---
 st.markdown("""
     <style>
-    /* Dark Theme Tweaks */
-    .stApp {
-        background-color: #0E1117;
-    }
-    /* Metric Cards */
-    div[data-testid="stMetricValue"] {
-        font-size: 26px;
-        color: #00CC96; /* Green Neon */
-    }
-    div[data-testid="stMetricLabel"] {
-        font-size: 14px;
-        color: #888;
-    }
-    /* Custom Box for Alternative */
+    .stApp { background-color: #0E1117; }
+    div[data-testid="stMetricValue"] { font-size: 26px; color: #00CC96; }
+    div[data-testid="stMetricLabel"] { font-size: 14px; color: #888; }
     .alt-box {
-        border: 1px solid #333;
-        border-radius: 10px;
-        padding: 15px;
-        background-color: #191c24;
-        margin-top: 10px;
+        border: 1px solid #333; border-radius: 10px; padding: 15px;
+        background-color: #191c24; margin-top: 10px;
     }
-    .alt-title {
-        color: #FFA15A;
-        font-weight: bold;
-        font-size: 16px;
-        margin-bottom: 5px;
-    }
-    .alt-text {
-        color: #ccc;
-        font-size: 14px;
-    }
+    .alt-title { color: #FFA15A; font-weight: bold; font-size: 16px; margin-bottom: 5px; }
+    .alt-text { color: #ccc; font-size: 14px; }
     </style>
     """, unsafe_allow_html=True)
 
 # --- 1. DATA ASSETS ---
 PORTS_DB = {
-    # --- ASIA ---
     'Shanghai (CN)':       {'Region': 'Asia', 'Price': 610, 'IsHub': False},
     'Singapore (SG)':      {'Region': 'Asia', 'Price': 620, 'IsHub': True},
     'Ningbo-Zhoushan (CN)':{'Region': 'Asia', 'Price': 605, 'IsHub': False},
@@ -53,27 +30,19 @@ PORTS_DB = {
     'Busan (KR)':          {'Region': 'Asia', 'Price': 640, 'IsHub': True},
     'Hong Kong (HK)':      {'Region': 'Asia', 'Price': 630, 'IsHub': True},
     'Tokyo (JP)':          {'Region': 'Asia', 'Price': 660, 'IsHub': False},
-    
-    # --- INDIA & MIDDLE EAST ---
     'Mumbai JNPT (IN)':    {'Region': 'India', 'Price': 665, 'IsHub': False},
     'Mundra (IN)':         {'Region': 'India', 'Price': 660, 'IsHub': False},
     'Fujairah (UAE)':      {'Region': 'ME',    'Price': 590, 'IsHub': True},
     'Jebel Ali (UAE)':     {'Region': 'ME',    'Price': 610, 'IsHub': True},
     'Salalah (OM)':        {'Region': 'ME',    'Price': 630, 'IsHub': True},
-
-    # --- EUROPE ---
     'Rotterdam (NL)':      {'Region': 'EU', 'Price': 595, 'IsHub': True},
     'Antwerp (BE)':        {'Region': 'EU', 'Price': 600, 'IsHub': True},
     'Algeciras (ES)':      {'Region': 'EU', 'Price': 620, 'IsHub': True},
     'Piraeus (GR)':        {'Region': 'EU', 'Price': 640, 'IsHub': False},
-    
-    # --- AMERICAS ---
     'Los Angeles (US)':    {'Region': 'US', 'Price': 650, 'IsHub': False},
     'New York/NJ (US)':    {'Region': 'US', 'Price': 640, 'IsHub': False},
     'Houston (US)':        {'Region': 'US', 'Price': 580, 'IsHub': True},
     'Panama Canal (PA)':   {'Region': 'SA', 'Price': 645, 'IsHub': True},
-    
-    # --- AFRICA ---
     'Tanger Med (MA)':     {'Region': 'Africa', 'Price': 630, 'IsHub': True},
     'Durban (ZA)':         {'Region': 'Africa', 'Price': 690, 'IsHub': False},
 }
@@ -82,21 +51,35 @@ def get_distance_engine(p1, p2):
     base_map = {
         frozenset(['Asia', 'EU']): 8500, frozenset(['Asia', 'US']): 5800,
         frozenset(['EU', 'US']): 3500, frozenset(['India', 'EU']): 6500,
-        frozenset(['India', 'Asia']): 2500, frozenset(['ME', 'EU']): 6000
+        frozenset(['India', 'Asia']): 2500, frozenset(['ME', 'EU']): 6000,
+        frozenset(['ME', 'US']): 8500
     }
     r1, r2 = PORTS_DB[p1]['Region'], PORTS_DB[p2]['Region']
     if p1 == p2: return 0
     if r1 == r2: return 1200 
     return base_map.get(frozenset([r1, r2]), 7000) + random.randint(-50, 50)
 
-def find_best_hub(origin, dest):
+# --- NEW: GEOGRAPHIC SANITY CHECK ---
+def find_valid_hub(origin, dest):
+    direct_dist = get_distance_engine(origin, dest)
     potential_hubs = [p for p, data in PORTS_DB.items() if data['IsHub'] and p != origin and p != dest]
-    return random.choice(potential_hubs) if potential_hubs else None
+    
+    valid_hubs = []
+    for hub in potential_hubs:
+        # Check Total Distance via Hub
+        dist_via = get_distance_engine(origin, hub) + get_distance_engine(hub, dest)
+        
+        # Max Deviation Rule: Route cannot be > 50% longer than direct
+        # This kills "Jebel Ali -> Houston -> Rotterdam" (which is +100% dist)
+        if dist_via < (direct_dist * 1.5):
+            valid_hubs.append(hub)
+            
+    return random.choice(valid_hubs) if valid_hubs else None
 
 # --- SIDEBAR ---
 st.sidebar.header("🕹️ Mission Control")
 sorted_ports = sorted(list(PORTS_DB.keys()))
-origin_port = st.sidebar.selectbox("🚩 Origin Port", sorted_ports, index=sorted_ports.index('Mumbai JNPT (IN)'))
+origin_port = st.sidebar.selectbox("🚩 Origin Port", sorted_ports, index=sorted_ports.index('Jebel Ali (UAE)'))
 dest_port = st.sidebar.selectbox("🏁 Destination Port", sorted_ports, index=sorted_ports.index('Rotterdam (NL)'))
 
 st.sidebar.markdown("---")
@@ -131,8 +114,6 @@ st.divider()
 
 # --- 2. THE OPTIMIZER ENGINE ---
 strategies = []
-
-# Dynamic Logic
 eco_speed_target = 11.0 if base_speed > 11.0 else 10.0
 
 scenarios = [
@@ -141,8 +122,8 @@ scenarios = [
     {"Name": "Green Corridor (Bio)", "Speed": 13.0, "Fuel": "Bio-B30", "Bio": True, "Type": "Direct"}
 ]
 
-# Multimodal Logic
-hub_port = find_best_hub(origin_port, dest_port)
+# Use NEW Geographic Check
+hub_port = find_valid_hub(origin_port, dest_port)
 has_multimodal = False
 if hub_port:
     has_multimodal = True
@@ -170,7 +151,7 @@ for sc in scenarios:
     s_days = dist / (s_speed * 24)
     total_days = s_days + port_days
     
-    daily_cons = 45 * ((s_speed / 14.0) ** 3) # Cubic Law
+    daily_cons = 45 * ((s_speed / 14.0) ** 3) 
     total_fuel = s_days * daily_cons
     
     fuel_cost = total_fuel * fuel_price
@@ -193,25 +174,19 @@ for sc in scenarios:
         "Net Profit": profit,
         "TCE": tce,
         "Total Cost": total_cost,
-        "Carbon Tax": final_tax,
-        "Type": sc['Type'],
-        "Details": "Transshipment" if sc['Type'] == "Multimodal" else "Direct Sea"
+        "Type": sc['Type']
     })
 
 df_strat = pd.DataFrame(strategies).sort_values(by="Net Profit", ascending=False)
 best_strat = df_strat.iloc[0]
 
-# Identify the "Alternative"
-# If winner is Multimodal, alt is Direct. If winner is Direct, alt is Multimodal (if exists).
+# Identify Alternative
 alternative_strat = None
 if best_strat['Type'] == 'Multimodal':
-    # Find best Direct
     alternative_strat = df_strat[df_strat['Type'] == 'Direct'].iloc[0]
 elif has_multimodal:
-    # Find Multimodal
     alternative_strat = df_strat[df_strat['Type'] == 'Multimodal'].iloc[0]
 else:
-    # Just the runner up
     alternative_strat = df_strat.iloc[1]
 
 # --- 3. VISUALIZATION CENTER ---
@@ -219,46 +194,26 @@ c1, c2 = st.columns([2, 1])
 
 with c1:
     st.subheader("📊 Financial Performance Comparison")
-    
-    # Clean Color Scheme
     color_map = {
-        f"Selected Speed ({base_speed}kts)": "#00CC96", # Greenish/Teal
-        f"Eco-Steaming ({eco_speed_target}kts)": "#636EFA", # Purple/Blue
-        "Green Corridor (Bio)": "#EF553B" # Red/Orange
+        f"Selected Speed ({base_speed}kts)": "#00CC96", 
+        f"Eco-Steaming ({eco_speed_target}kts)": "#636EFA", 
+        "Green Corridor (Bio)": "#EF553B"
     }
     for s in strategies:
-        if "Re-export" in s['Strategy']: color_map[s['Strategy']] = "#FFA15A" # Orange
+        if "Re-export" in s['Strategy']: color_map[s['Strategy']] = "#FFA15A"
 
     fig = px.bar(df_strat, x="Strategy", y="Net Profit", 
-                 color="Strategy", 
-                 color_discrete_map=color_map,
-                 text_auto='.2s')
-    
-    # SLIM & CLEAN GRAPH
-    fig.update_layout(
-        height=280, # Slimmer
-        margin=dict(l=0, r=0, t=20, b=0),
-        xaxis_title=None, # Remove "Strategy" text
-        yaxis_title="Net Profit ($)",
-        showlegend=False, # Remove Legend (Redundant with Axis)
-        plot_bgcolor='rgba(0,0,0,0)',
-        paper_bgcolor='rgba(0,0,0,0)',
-        font=dict(color='#ccc')
+                 color="Strategy", color_discrete_map=color_map, text_auto='.2s')
+    fig.update_layout(height=280, margin=dict(l=0, r=0, t=20, b=0),
+        xaxis_title=None, yaxis_title="Net Profit ($)", showlegend=False,
+        plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', font=dict(color='#ccc')
     )
-    # Customize Hover
-    fig.update_traces(hovertemplate='<b>%{x}</b><br>Profit: $%{y:,.0f}<extra></extra>')
-    
     st.plotly_chart(fig, use_container_width=True)
 
 with c2:
     st.subheader("🤖 AI Recommendation")
-    
     top_strat_name = best_strat['Strategy']
     speed_diff = best_strat['Speed'] - base_speed
-    
-    # Recommendation Logic
-    rec_title = ""
-    rec_text = ""
     
     if "Re-export" in top_strat_name:
         rec_title = "GO MULTIMODAL"
@@ -276,9 +231,7 @@ with c2:
 
     st.success(f"**STRATEGY: {rec_title}**")
     st.write(rec_text)
-    st.metric("Optimal TCE", f"${best_strat['TCE']:,.0f} / day")
-
-    # --- BEST ALTERNATIVE BOX ---
+    
     if alternative_strat is not None:
         diff_profit = best_strat['Net Profit'] - alternative_strat['Net Profit']
         st.markdown(f"""
@@ -294,13 +247,7 @@ with c2:
 # --- 4. DATA TABLE ---
 st.markdown("### 📋 Detailed Voyage P&L")
 st.dataframe(
-    df_strat[['Strategy', 'Speed', 'Net Profit', 'TCE', 'Carbon Tax', 'Total Cost']]
-    .style.format({
-        "Speed": "{:.1f} kts",
-        "Net Profit": "${:,.0f}", 
-        "TCE": "${:,.0f}", 
-        "Carbon Tax": "${:,.0f}", 
-        "Total Cost": "${:,.0f}"
-    }),
+    df_strat[['Strategy', 'Speed', 'Net Profit', 'TCE', 'Total Cost']]
+    .style.format({"Speed": "{:.1f} kts", "Net Profit": "${:,.0f}", "TCE": "${:,.0f}", "Total Cost": "${:,.0f}"}),
     use_container_width=True
 )
