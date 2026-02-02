@@ -4,218 +4,264 @@ import plotly.express as px
 import random
 
 # --- CONFIGURATION ---
-st.set_page_config(page_title="Global Voyage Commander", layout="wide")
+st.set_page_config(
+    page_title="Global Voyage Commander",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-# --- 1. THE TOP 40 PORT DATABASE (Simulated Live Snapshot) ---
-# Prices = Approx VLSFO $/mt (2025 estimates) | Dev_Cost = Deviation penalty
+# --- CUSTOM CSS FOR BUSINESS THEME ---
+st.markdown("""
+    <style>
+    .stApp { background-color: #f8f9fa; }
+    h1, h2, h3 { font-family: 'Segoe UI', sans-serif; color: #0f2537; font-weight: 600; }
+    div[data-testid="stMetricValue"] { font-size: 24px; color: #004e89; }
+    div[data-testid="stMetricLabel"] { font-size: 14px; color: #555; }
+    section[data-testid="stSidebar"] { background-color: #ffffff; border-right: 1px solid #e0e0e0; }
+    .css-card { background-color: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+    </style>
+    """, unsafe_allow_html=True)
+
+# --- 1. DATA ASSETS ---
+# 'IsHub': True marks ports capable of efficient re-export/transshipment
 PORTS_DB = {
-    # --- ASIA GIANTS ---
-    'Shanghai (CN)':       {'Region': 'Asia', 'Price': 610, 'Lat': 31.23, 'Lon': 121.47},
-    'Singapore (SG)':      {'Region': 'Asia', 'Price': 620, 'Lat': 1.29,  'Lon': 103.85},
-    'Ningbo-Zhoushan (CN)':{'Region': 'Asia', 'Price': 605, 'Lat': 29.88, 'Lon': 121.64},
-    'Shenzhen (CN)':       {'Region': 'Asia', 'Price': 615, 'Lat': 22.54, 'Lon': 114.05},
-    'Guangzhou (CN)':      {'Region': 'Asia', 'Price': 625, 'Lat': 23.12, 'Lon': 113.26},
-    'Busan (KR)':          {'Region': 'Asia', 'Price': 640, 'Lat': 35.10, 'Lon': 129.04},
-    'Qingdao (CN)':        {'Region': 'Asia', 'Price': 612, 'Lat': 36.06, 'Lon': 120.38},
-    'Hong Kong (HK)':      {'Region': 'Asia', 'Price': 630, 'Lat': 22.31, 'Lon': 114.16},
-    'Tianjin (CN)':        {'Region': 'Asia', 'Price': 620, 'Lat': 38.99, 'Lon': 117.71},
-    'Port Klang (MY)':     {'Region': 'Asia', 'Price': 635, 'Lat': 3.00,  'Lon': 101.40},
-    'Kaohsiung (TW)':      {'Region': 'Asia', 'Price': 645, 'Lat': 22.62, 'Lon': 120.28},
-    'Tokyo (JP)':          {'Region': 'Asia', 'Price': 660, 'Lat': 35.68, 'Lon': 139.76},
-    'Laem Chabang (TH)':   {'Region': 'Asia', 'Price': 650, 'Lat': 13.08, 'Lon': 100.91},
+    # --- ASIA ---
+    'Shanghai (CN)':       {'Region': 'Asia', 'Price': 610, 'IsHub': False},
+    'Singapore (SG)':      {'Region': 'Asia', 'Price': 620, 'IsHub': True},  # Major Hub
+    'Ningbo-Zhoushan (CN)':{'Region': 'Asia', 'Price': 605, 'IsHub': False},
+    'Shenzhen (CN)':       {'Region': 'Asia', 'Price': 615, 'IsHub': False},
+    'Busan (KR)':          {'Region': 'Asia', 'Price': 640, 'IsHub': True},
+    'Hong Kong (HK)':      {'Region': 'Asia', 'Price': 630, 'IsHub': True},
     
     # --- INDIA & MIDDLE EAST ---
-    'Mundra (IN)':         {'Region': 'India', 'Price': 660, 'Lat': 22.84, 'Lon': 69.70},
-    'Mumbai JNPT (IN)':    {'Region': 'India', 'Price': 665, 'Lat': 18.95, 'Lon': 72.95},
-    'Chennai (IN)':        {'Region': 'India', 'Price': 680, 'Lat': 13.08, 'Lon': 80.29},
-    'Cochin (IN)':         {'Region': 'India', 'Price': 675, 'Lat': 9.96,  'Lon': 76.24},
-    'Visakhapatnam (IN)':  {'Region': 'India', 'Price': 685, 'Lat': 17.69, 'Lon': 83.29},
-    'Kolkata (IN)':        {'Region': 'India', 'Price': 700, 'Lat': 22.54, 'Lon': 88.33},
-    'Fujairah (UAE)':      {'Region': 'ME',    'Price': 600, 'Lat': 25.11, 'Lon': 56.32}, # Major Hub
-    'Jebel Ali (UAE)':     {'Region': 'ME',    'Price': 610, 'Lat': 24.98, 'Lon': 55.07},
-    'Salalah (OM)':        {'Region': 'ME',    'Price': 630, 'Lat': 16.94, 'Lon': 54.00},
-    
+    'Mumbai JNPT (IN)':    {'Region': 'India', 'Price': 665, 'IsHub': False},
+    'Mundra (IN)':         {'Region': 'India', 'Price': 660, 'IsHub': False},
+    'Fujairah (UAE)':      {'Region': 'ME',    'Price': 590, 'IsHub': True}, # Cheap Fuel Hub
+    'Jebel Ali (UAE)':     {'Region': 'ME',    'Price': 610, 'IsHub': True},
+    'Salalah (OM)':        {'Region': 'ME',    'Price': 630, 'IsHub': True},
+
     # --- EUROPE ---
-    'Rotterdam (NL)':      {'Region': 'EU', 'Price': 595, 'Lat': 51.92, 'Lon': 4.47},
-    'Antwerp (BE)':        {'Region': 'EU', 'Price': 600, 'Lat': 51.22, 'Lon': 4.40},
-    'Hamburg (DE)':        {'Region': 'EU', 'Price': 610, 'Lat': 53.54, 'Lon': 9.98},
-    'Algeciras (ES)':      {'Region': 'EU', 'Price': 620, 'Lat': 36.14, 'Lon': -5.45},
-    'Valencia (ES)':       {'Region': 'EU', 'Price': 625, 'Lat': 39.46, 'Lon': -0.37},
-    'Piraeus (GR)':        {'Region': 'EU', 'Price': 640, 'Lat': 37.94, 'Lon': 23.64},
-    'Gibraltar (UK)':      {'Region': 'EU', 'Price': 635, 'Lat': 36.14, 'Lon': -5.35},
+    'Rotterdam (NL)':      {'Region': 'EU', 'Price': 595, 'IsHub': True},
+    'Antwerp (BE)':        {'Region': 'EU', 'Price': 600, 'IsHub': True},
+    'Algeciras (ES)':      {'Region': 'EU', 'Price': 620, 'IsHub': True},
+    'Piraeus (GR)':        {'Region': 'EU', 'Price': 640, 'IsHub': False},
     
     # --- AMERICAS ---
-    'Los Angeles (US)':    {'Region': 'US', 'Price': 650, 'Lat': 33.72, 'Lon': -118.27},
-    'Long Beach (US)':     {'Region': 'US', 'Price': 655, 'Lat': 33.76, 'Lon': -118.19},
-    'New York/NJ (US)':    {'Region': 'US', 'Price': 640, 'Lat': 40.66, 'Lon': -74.02},
-    'Houston (US)':        {'Region': 'US', 'Price': 580, 'Lat': 29.76, 'Lon': -95.36}, # Cheap Fuel
-    'Savannah (US)':       {'Region': 'US', 'Price': 660, 'Lat': 32.08, 'Lon': -81.09},
-    'Santos (BR)':         {'Region': 'SA', 'Price': 690, 'Lat': -23.96, 'Lon': -46.33},
-    'Panama Canal (PA)':   {'Region': 'SA', 'Price': 645, 'Lat': 9.08,  'Lon': -79.68},
+    'Los Angeles (US)':    {'Region': 'US', 'Price': 650, 'IsHub': False},
+    'New York/NJ (US)':    {'Region': 'US', 'Price': 640, 'IsHub': False},
+    'Houston (US)':        {'Region': 'US', 'Price': 580, 'IsHub': True},
+    'Panama Canal (PA)':   {'Region': 'SA', 'Price': 645, 'IsHub': True}, # Strategic Chokepoint
     
-    # --- AFRICA/OTHERS ---
-    'Tanger Med (MA)':     {'Region': 'Africa', 'Price': 630, 'Lat': 35.88, 'Lon': -5.50},
-    'Durban (ZA)':         {'Region': 'Africa', 'Price': 690, 'Lat': -29.88, 'Lon': 31.02},
-    'Port Said (EG)':      {'Region': 'Africa', 'Price': 650, 'Lat': 31.26, 'Lon': 32.30},
+    # --- AFRICA ---
+    'Tanger Med (MA)':     {'Region': 'Africa', 'Price': 630, 'IsHub': True}, # Major Re-export Hub
+    'Durban (ZA)':         {'Region': 'Africa', 'Price': 690, 'IsHub': False},
 }
 
-# --- 2. SMART DISTANCE ENGINE ---
-# Instead of hardcoding 1600 routes, we map regions and add logical distances
-# This acts as a "Mock API" for the demo
-def get_distance(p1, p2):
-    # Simplified lookup for major trade lanes
-    # Key = (Region A, Region B)
-    base_distances = {
-        ('Asia', 'EU'): 8500,    ('EU', 'Asia'): 8500,
-        ('Asia', 'US'): 5800,    ('US', 'Asia'): 5800,
-        ('EU', 'US'): 3500,      ('US', 'EU'): 3500,
-        ('India', 'EU'): 6500,   ('EU', 'India'): 6500,
-        ('India', 'Asia'): 2500, ('Asia', 'India'): 2500,
-        ('India', 'ME'): 1200,   ('ME', 'India'): 1200,
-        ('ME', 'EU'): 6000,      ('EU', 'ME'): 6000,
-        ('Africa', 'Asia'): 5000,('Asia', 'Africa'): 5000,
+def get_distance_engine(p1, p2):
+    # Simplified Logic for Demo
+    base_map = {
+        frozenset(['Asia', 'EU']): 8500,
+        frozenset(['Asia', 'US']): 5800,
+        frozenset(['EU', 'US']): 3500,
+        frozenset(['India', 'EU']): 6500,
+        frozenset(['India', 'Asia']): 2500,
+        frozenset(['India', 'ME']): 1200,
+        frozenset(['ME', 'EU']): 6000,
+        frozenset(['Africa', 'Asia']): 5000,
     }
-    
-    r1 = PORTS_DB[p1]['Region']
-    r2 = PORTS_DB[p2]['Region']
-    
+    r1, r2 = PORTS_DB[p1]['Region'], PORTS_DB[p2]['Region']
     if p1 == p2: return 0
-    if r1 == r2: return 1200 # Intra-region average
-    
-    # Return base distance + random variation to make it look realistic per port
-    base = base_distances.get((r1, r2)) or 7000 # Default if unknown
-    return base + random.randint(-200, 200)
+    if r1 == r2: return 1200 
+    key = frozenset([r1, r2])
+    return base_map.get(key, 7000) + random.randint(-50, 50)
+
+def find_best_hub(origin, dest):
+    # Finds a logical intermediate hub that isn't the origin or dest
+    potential_hubs = [p for p, data in PORTS_DB.items() if data['IsHub'] and p != origin and p != dest]
+    if not potential_hubs: return None
+    # For demo, just pick a random valid hub to simulate "Opportunity"
+    # In production, this would calculate minimal deviation
+    return random.choice(potential_hubs)
 
 # --- SIDEBAR ---
-st.sidebar.header("🕹️ Mission Control")
-
-# Sort ports alphabetically for the dropdown
+st.sidebar.title("Voyage Configuration")
 sorted_ports = sorted(list(PORTS_DB.keys()))
-origin_port = st.sidebar.selectbox("🚩 Origin Port", sorted_ports, index=sorted_ports.index('Mumbai JNPT (IN)'))
-dest_port = st.sidebar.selectbox("🏁 Destination Port", sorted_ports, index=sorted_ports.index('Rotterdam (NL)'))
-
+origin_port = st.sidebar.selectbox("Origin Port", sorted_ports, index=sorted_ports.index('Mumbai JNPT (IN)'))
+dest_port = st.sidebar.selectbox("Destination Port", sorted_ports, index=sorted_ports.index('Rotterdam (NL)'))
 st.sidebar.markdown("---")
-st.sidebar.subheader("⚙️ Vessel Specs")
-cargo_size = st.sidebar.number_input("Cargo (mt)", value=55000)
-freight_rate = st.sidebar.number_input("Freight Rate ($/mt)", value=45.0)
-base_speed = st.sidebar.slider("Cruising Speed (kts)", 10.0, 18.0, 14.0)
+cargo_size = st.sidebar.number_input("Cargo (mt)", value=55000, step=1000)
+freight_rate = st.sidebar.number_input("Freight Rate ($/mt)", value=45.0, step=0.5)
+base_speed = st.sidebar.slider("Design Speed (kts)", 10.0, 18.0, 14.0)
+
+# --- MAIN ENGINE ---
+st.title("Global Voyage Commander")
+st.markdown("### Logistics Optimization & Multimodal Analysis")
+
+if origin_port == dest_port:
+    st.error("⚠️ Invalid Route: Origin and Destination are identical.")
+    st.stop()
+
+# 1. BASELINE CALCULATIONS
+dist_direct = get_distance_engine(origin_port, dest_port)
+days_direct = dist_direct / (base_speed * 24)
+revenue = cargo_size * freight_rate
+
+# 2. STRATEGY GENERATION
+strategies = []
 
 # Constants
 OPEX_DAILY = 8500 
-CARBON_TAX_PRICE = 95 # EU ETS Price
+CARBON_TAX_PRICE = 95 
 FACTOR_VLSFO = 3.151
 
-# --- MAIN APP ---
-st.title("⚓ Global Voyage Commander")
-st.markdown("### Top 40 Port Intelligence & Route Optimization")
-
-# 1. LIVE ROUTE DATA
-dist_nm = get_distance(origin_port, dest_port)
-days_at_sea = dist_nm / (base_speed * 24)
-revenue = cargo_size * freight_rate
-
-# Top Metrics Row
-m1, m2, m3, m4 = st.columns(4)
-m1.metric("Route Distance", f"{dist_nm:,.0f} nm")
-m2.metric("Est. Duration", f"{days_at_sea:.1f} days")
-m3.metric("Projected Revenue", f"${revenue:,.0f}")
-m4.metric("EU Carbon Price", f"${CARBON_TAX_PRICE}/mt")
-
-st.divider()
-
-# --- 2. THE OPTIMIZER ENGINE ---
-# We calculate 3 Strategies: Standard, Eco-Steaming, and "Green Premium"
-strategies = []
-
+# A. Standard Strategies
 scenarios = [
-    {"Name": "Standard Speed (14kts)", "Speed": 14.0, "Fuel": "VLSFO", "Bio": False},
-    {"Name": "Eco-Steaming (11kts)",   "Speed": 11.0, "Fuel": "VLSFO", "Bio": False},
-    {"Name": "Green Corridor (Bio)",   "Speed": 13.0, "Fuel": "Bio-B30", "Bio": True}
+    {"Name": "Direct (Standard)", "Speed": 14.0, "Fuel": "VLSFO", "Bio": False, "Type": "Direct"},
+    {"Name": "Direct (Eco-Steam)", "Speed": 11.0, "Fuel": "VLSFO", "Bio": False, "Type": "Direct"},
+    {"Name": "Direct (Green Bio)", "Speed": 13.0, "Fuel": "Bio-B30", "Bio": True, "Type": "Direct"}
 ]
+
+# B. Add Multimodal/Re-export Strategy
+hub_port = find_best_hub(origin_port, dest_port)
+if hub_port:
+    scenarios.append({
+        "Name": f"Re-export via {hub_port.split(' ')[0]}", 
+        "Speed": 14.5, # Usually faster to make up for port time
+        "Fuel": "VLSFO", 
+        "Bio": False, 
+        "Type": "Multimodal",
+        "Hub": hub_port
+    })
 
 for sc in scenarios:
     s_speed = sc['Speed']
-    s_days = dist_nm / (s_speed * 24)
-    total_days = s_days + 3 # Port turnaround
     
-    # Fuel Model (Cubic Law)
-    base_cons = 45 # mt/day at 14 knots
+    if sc['Type'] == 'Direct':
+        dist = dist_direct
+        port_days = 3
+        # Fuel Price based on Destination (Standard approximation)
+        fuel_price = PORTS_DB[dest_port]['Price']
+        tax_reduction = 0
+        handling_fee = 0
+    else:
+        # Multimodal / Re-export Logic
+        dist1 = get_distance_engine(origin_port, sc['Hub'])
+        dist2 = get_distance_engine(sc['Hub'], dest_port)
+        dist = dist1 + dist2
+        port_days = 6 # Two port calls (Origin + Hub) + Unload
+        
+        # Benefit 1: Refuel at Hub (likely cheaper?)
+        fuel_price = PORTS_DB[sc['Hub']]['Price'] 
+        
+        # Benefit 2: Trade Agreement / Tax Loophole
+        # Simulate a 30% reduction in regulatory costs or tariffs due to "Re-export" status
+        tax_reduction = 0.30 
+        
+        # Cost: Extra Handling at Hub
+        handling_fee = 45000 # Flat fee for transshipment
+    
+    if sc['Bio']: fuel_price *= 1.4
+
+    # Mechanics
+    s_days = dist / (s_speed * 24)
+    total_days = s_days + port_days
+    
+    base_cons = 45 
     daily_cons = base_cons * ((s_speed / 14.0) ** 3)
     total_fuel = s_days * daily_cons
-    
-    # Price Logic (Destination Price used as Proxy)
-    fuel_price = PORTS_DB[dest_port]['Price']
-    if sc['Bio']: fuel_price *= 1.4 # 40% Premium for Biofuel
     
     fuel_cost = total_fuel * fuel_price
     opex_cost = total_days * OPEX_DAILY
     
-    # Carbon Tax Logic
     emissions = total_fuel * FACTOR_VLSFO
-    if sc['Bio']: emissions *= 0.7 # 30% reduction for B30 blend
+    if sc['Bio']: emissions *= 0.7
     
-    # Tax applies if touching EU ports
     is_eu_route = 'EU' in [PORTS_DB[origin_port]['Region'], PORTS_DB[dest_port]['Region']]
-    tax_cost = (emissions * CARBON_TAX_PRICE) if is_eu_route else 0
+    raw_tax = (emissions * CARBON_TAX_PRICE) if is_eu_route else 0
     
-    total_cost = fuel_cost + opex_cost + tax_cost
+    # Apply Tax/Tariff Reduction for Multimodal
+    final_tax = raw_tax * (1 - tax_reduction)
+    
+    total_cost = fuel_cost + opex_cost + final_tax + handling_fee
     profit = revenue - total_cost
     tce = profit / total_days
     
-    # CII Logic
-    cii_score = (emissions * 1e6) / (cargo_size * dist_nm)
-    grade = 'A' if cii_score < 5 else 'C' if cii_score < 7 else 'E'
-    
     strategies.append({
         "Strategy": sc['Name'],
-        "Speed": s_speed,
         "Net Profit": profit,
-        "TCE ($/day)": tce,
+        "TCE": tce,
+        "Tax Cost": final_tax,
         "Total Cost": total_cost,
-        "Carbon Tax": tax_cost,
-        "CII Grade": grade,
-        "Emissions (mt)": emissions
+        "Details": "Transshipment" if sc['Type'] == "Multimodal" else "Direct Sea"
     })
 
 df_strat = pd.DataFrame(strategies).sort_values(by="Net Profit", ascending=False)
 best_strat = df_strat.iloc[0]
 
-# --- 3. VISUALIZATION CENTER ---
+# --- 3. METRICS ---
+m1, m2, m3, m4 = st.columns(4)
+m1.metric("Direct Distance", f"{dist_direct:,.0f} nm")
+m2.metric("Market Freight", f"${freight_rate:.2f}/mt")
+m3.metric("Est. Revenue", f"${revenue:,.0f}")
+m4.metric("Best Profit", f"${best_strat['Net Profit']:,.0f}", delta=best_strat['Strategy'])
+
+st.divider()
+
+# --- 4. VISUALIZATION & AI ---
 c1, c2 = st.columns([2, 1])
 
 with c1:
-    st.subheader("📊 Financial Performance Comparison")
-    fig = px.bar(df_strat, x="Strategy", y=["Net Profit", "Carbon Tax"], 
-                 title="Profit vs. Regulatory Cost",
-                 color_discrete_map={"Net Profit": "#00CC96", "Carbon Tax": "#EF553B"},
+    st.subheader("Financial Comparison")
+    # Custom Color mapping to highlight Multimodal
+    color_map = {
+        "Direct (Standard)": "#2F4858", 
+        "Direct (Eco-Steam)": "#004e89",
+        "Direct (Green Bio)": "#00CC96",
+    }
+    # Dynamic color for the variable hub name
+    for s in strategies:
+        if "Re-export" in s['Strategy']: color_map[s['Strategy']] = "#FF6B6B" # Highlight color
+
+    fig = px.bar(df_strat, x="Strategy", y="Net Profit", 
+                 title="Net Profit by Strategy (After Tax & Opex)",
+                 color="Strategy", color_discrete_map=color_map,
                  text_auto='.2s')
+    fig.update_layout(height=350, showlegend=False, 
+                      margin=dict(l=20, r=20, t=40, b=20),
+                      plot_bgcolor='rgba(0,0,0,0)')
     st.plotly_chart(fig, use_container_width=True)
 
 with c2:
-    st.subheader("🤖 AI Recommendation")
+    st.subheader("AI Strategic Advice")
     
-    if best_strat['Strategy'] == "Eco-Steaming (11kts)":
-        st.success("Recommendation: **SLOW DOWN**")
-        st.write("Slowing to 11 knots saves significantly on fuel & tax, outweighing the extra days.")
-    else:
-        st.info(f"Recommendation: **{best_strat['Strategy']}**")
-        st.write("Current market conditions favor maintaining speed for higher TCE turnover.")
+    top_strat = best_strat['Strategy']
+    
+    if "Re-export" in top_strat:
+        hub_name = top_strat.split("via ")[1]
+        st.success(f"**RECOMMENDATION: MULTIMODAL / RE-EXPORT**")
+        st.markdown(f"""
+        **Route:** Origin ➔ **{hub_name}** ➔ Destination
         
-    st.metric("Optimal TCE", f"${best_strat['TCE ($/day)']:,.0f} / day")
-    
-    with st.expander("Show Compliance (CII)"):
-        for i, row in df_strat.iterrows():
-            color = "green" if row['CII Grade'] == 'A' else "red"
-            st.markdown(f"**{row['Strategy']}**: :{color}[Grade {row['CII Grade']}]")
+        **Why it wins:**
+        1. **Better Trade Agreement:** Utilizing {hub_name} as a re-export hub reduced regulatory tax exposure by 30%.
+        2. **Fuel Arbitrage:** Bunkering at {hub_name} was cheaper than the destination price.
+        
+        _The extra handling fees were offset by significant tax savings._
+        """)
+    elif "Eco-Steam" in top_strat:
+        st.info("**RECOMMENDATION: SLOW STEAMING**")
+        st.write("Current market rates do not justify high fuel consumption. Slow down to 11 knots to maximize TCE.")
+    else:
+        st.write(f"**Recommendation: {top_strat}**")
+        st.write("Direct route at standard speed offers the best turnover.")
 
-# --- 4. DATA TABLE ---
-st.markdown("### 📋 Detailed Voyage P&L")
+    st.metric("Profit Uplift", f"+${(df_strat.iloc[0]['Net Profit'] - df_strat.iloc[1]['Net Profit']):,.0f}", "vs next best option")
+
+# --- 5. DETAILED TABLE ---
+st.subheader("Scenario Analysis Data")
 st.dataframe(
-    df_strat[['Strategy', 'Speed', 'Net Profit', 'TCE ($/day)', 'Carbon Tax', 'CII Grade', 'Emissions (mt)']]
-    .style.format({"Net Profit": "${:,.0f}", "TCE ($/day)": "${:,.0f}", "Carbon Tax": "${:,.0f}", "Emissions (mt)": "{:,.0f}"}),
+    df_strat[['Strategy', 'Details', 'Net Profit', 'TCE', 'Tax Cost', 'Total Cost']]
+    .style.format({"Net Profit": "${:,.0f}", "TCE": "${:,.0f}", "Tax Cost": "${:,.0f}", "Total Cost": "${:,.0f}"})
+    .background_gradient(subset=['Net Profit'], cmap="Greens"),
     use_container_width=True
 )
-
-st.sidebar.info("Data Sources: Simulated snapshot based on 2025 Global Top 40 Rankings & VLSFO Averages.")
-st.sidebar.markdown("---")
-st.sidebar.caption("Built by Sangeet Bihani - https://www.linkedin.com/in/sangeet-bihani-54068220b/ ")
