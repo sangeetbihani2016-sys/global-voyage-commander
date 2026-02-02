@@ -217,3 +217,5 @@ st.dataframe(
 )
 
 st.sidebar.info("Data Sources: Simulated snapshot based on 2025 Global Top 40 Rankings & VLSFO Averages.")
+st.sidebar.markdown("---")
+st.sidebar.caption("Built by Sangeet Bihani - https://www.linkedin.com/in/sangeet-bihani-54068220b/ ")
