@@ -1,10 +1,3 @@
-I have stripped out all the "Business Theme" CSS and reverted the visual style to the **original dark/neon** aesthetic you started with.
-
-I kept all the **logic fixes** (the dynamic speed slider, the multimodal routing, and the crash prevention), so the app is smarter but looks like the original version again.
-
-### The Code (Original Look + Smart Logic)
-
-```python
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -231,5 +224,3 @@ st.dataframe(
     }),
     use_container_width=True
 )
-
-```
