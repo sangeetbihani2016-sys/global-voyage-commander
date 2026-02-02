@@ -259,9 +259,15 @@ with c2:
 
 # --- 5. DETAILED TABLE ---
 st.subheader("Scenario Analysis Data")
+
+# We remove .background_gradient to avoid the matplotlib error
 st.dataframe(
     df_strat[['Strategy', 'Details', 'Net Profit', 'TCE', 'Tax Cost', 'Total Cost']]
-    .style.format({"Net Profit": "${:,.0f}", "TCE": "${:,.0f}", "Tax Cost": "${:,.0f}", "Total Cost": "${:,.0f}"})
-    .background_gradient(subset=['Net Profit'], cmap="Greens"),
+    .style.format({
+        "Net Profit": "${:,.0f}", 
+        "TCE": "${:,.0f}", 
+        "Tax Cost": "${:,.0f}", 
+        "Total Cost": "${:,.0f}"
+    }),
     use_container_width=True
 )
