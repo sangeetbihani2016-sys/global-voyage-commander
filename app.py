@@ -10,24 +10,40 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- CUSTOM CSS FOR BUSINESS THEME ---
+# --- CUSTOM CSS (THEME PROOF) ---
+# This forces "Business Light" mode even if your computer is in Dark Mode
 st.markdown("""
     <style>
-    .stApp { background-color: #f8f9fa; }
-    h1, h2, h3 { font-family: 'Segoe UI', sans-serif; color: #0f2537; font-weight: 600; }
-    div[data-testid="stMetricValue"] { font-size: 24px; color: #004e89; }
-    div[data-testid="stMetricLabel"] { font-size: 14px; color: #555; }
-    section[data-testid="stSidebar"] { background-color: #ffffff; border-right: 1px solid #e0e0e0; }
-    .css-card { background-color: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+    /* Force Background to Light Grey */
+    [data-testid="stAppViewContainer"] {
+        background-color: #f8f9fa;
+    }
+    /* Force Sidebar to White */
+    [data-testid="stSidebar"] {
+        background-color: #ffffff;
+        border-right: 1px solid #e0e0e0;
+    }
+    /* FORCE ALL TEXT TO DARK NAVY (Fixes the invisible text issue) */
+    h1, h2, h3, h4, h5, h6, p, div, span, label, li {
+        color: #0f2537 !important;
+        font-family: 'Segoe UI', sans-serif;
+    }
+    /* Fix Metric Values */
+    div[data-testid="stMetricValue"] {
+        color: #004e89 !important;
+    }
+    /* Fix Metric Labels */
+    div[data-testid="stMetricLabel"] > label {
+        color: #555 !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
 # --- 1. DATA ASSETS ---
-# 'IsHub': True marks ports capable of efficient re-export/transshipment
 PORTS_DB = {
     # --- ASIA ---
     'Shanghai (CN)':       {'Region': 'Asia', 'Price': 610, 'IsHub': False},
-    'Singapore (SG)':      {'Region': 'Asia', 'Price': 620, 'IsHub': True},  # Major Hub
+    'Singapore (SG)':      {'Region': 'Asia', 'Price': 620, 'IsHub': True},
     'Ningbo-Zhoushan (CN)':{'Region': 'Asia', 'Price': 605, 'IsHub': False},
     'Shenzhen (CN)':       {'Region': 'Asia', 'Price': 615, 'IsHub': False},
     'Busan (KR)':          {'Region': 'Asia', 'Price': 640, 'IsHub': True},
@@ -36,7 +52,7 @@ PORTS_DB = {
     # --- INDIA & MIDDLE EAST ---
     'Mumbai JNPT (IN)':    {'Region': 'India', 'Price': 665, 'IsHub': False},
     'Mundra (IN)':         {'Region': 'India', 'Price': 660, 'IsHub': False},
-    'Fujairah (UAE)':      {'Region': 'ME',    'Price': 590, 'IsHub': True}, # Cheap Fuel Hub
+    'Fujairah (UAE)':      {'Region': 'ME',    'Price': 590, 'IsHub': True},
     'Jebel Ali (UAE)':     {'Region': 'ME',    'Price': 610, 'IsHub': True},
     'Salalah (OM)':        {'Region': 'ME',    'Price': 630, 'IsHub': True},
 
@@ -50,10 +66,10 @@ PORTS_DB = {
     'Los Angeles (US)':    {'Region': 'US', 'Price': 650, 'IsHub': False},
     'New York/NJ (US)':    {'Region': 'US', 'Price': 640, 'IsHub': False},
     'Houston (US)':        {'Region': 'US', 'Price': 580, 'IsHub': True},
-    'Panama Canal (PA)':   {'Region': 'SA', 'Price': 645, 'IsHub': True}, # Strategic Chokepoint
+    'Panama Canal (PA)':   {'Region': 'SA', 'Price': 645, 'IsHub': True},
     
     # --- AFRICA ---
-    'Tanger Med (MA)':     {'Region': 'Africa', 'Price': 630, 'IsHub': True}, # Major Re-export Hub
+    'Tanger Med (MA)':     {'Region': 'Africa', 'Price': 630, 'IsHub': True},
     'Durban (ZA)':         {'Region': 'Africa', 'Price': 690, 'IsHub': False},
 }
 
@@ -76,11 +92,8 @@ def get_distance_engine(p1, p2):
     return base_map.get(key, 7000) + random.randint(-50, 50)
 
 def find_best_hub(origin, dest):
-    # Finds a logical intermediate hub that isn't the origin or dest
     potential_hubs = [p for p, data in PORTS_DB.items() if data['IsHub'] and p != origin and p != dest]
     if not potential_hubs: return None
-    # For demo, just pick a random valid hub to simulate "Opportunity"
-    # In production, this would calculate minimal deviation
     return random.choice(potential_hubs)
 
 # --- SIDEBAR ---
@@ -108,8 +121,6 @@ revenue = cargo_size * freight_rate
 
 # 2. STRATEGY GENERATION
 strategies = []
-
-# Constants
 OPEX_DAILY = 8500 
 CARBON_TAX_PRICE = 95 
 FACTOR_VLSFO = 3.151
@@ -126,7 +137,7 @@ hub_port = find_best_hub(origin_port, dest_port)
 if hub_port:
     scenarios.append({
         "Name": f"Re-export via {hub_port.split(' ')[0]}", 
-        "Speed": 14.5, # Usually faster to make up for port time
+        "Speed": 14.5,
         "Fuel": "VLSFO", 
         "Bio": False, 
         "Type": "Multimodal",
@@ -139,30 +150,20 @@ for sc in scenarios:
     if sc['Type'] == 'Direct':
         dist = dist_direct
         port_days = 3
-        # Fuel Price based on Destination (Standard approximation)
         fuel_price = PORTS_DB[dest_port]['Price']
         tax_reduction = 0
         handling_fee = 0
     else:
-        # Multimodal / Re-export Logic
         dist1 = get_distance_engine(origin_port, sc['Hub'])
         dist2 = get_distance_engine(sc['Hub'], dest_port)
         dist = dist1 + dist2
-        port_days = 6 # Two port calls (Origin + Hub) + Unload
-        
-        # Benefit 1: Refuel at Hub (likely cheaper?)
+        port_days = 6 
         fuel_price = PORTS_DB[sc['Hub']]['Price'] 
-        
-        # Benefit 2: Trade Agreement / Tax Loophole
-        # Simulate a 30% reduction in regulatory costs or tariffs due to "Re-export" status
         tax_reduction = 0.30 
-        
-        # Cost: Extra Handling at Hub
-        handling_fee = 45000 # Flat fee for transshipment
+        handling_fee = 45000 
     
     if sc['Bio']: fuel_price *= 1.4
 
-    # Mechanics
     s_days = dist / (s_speed * 24)
     total_days = s_days + port_days
     
@@ -178,8 +179,6 @@ for sc in scenarios:
     
     is_eu_route = 'EU' in [PORTS_DB[origin_port]['Region'], PORTS_DB[dest_port]['Region']]
     raw_tax = (emissions * CARBON_TAX_PRICE) if is_eu_route else 0
-    
-    # Apply Tax/Tariff Reduction for Multimodal
     final_tax = raw_tax * (1 - tax_reduction)
     
     total_cost = fuel_cost + opex_cost + final_tax + handling_fee
@@ -212,20 +211,22 @@ c1, c2 = st.columns([2, 1])
 
 with c1:
     st.subheader("Financial Comparison")
-    # Custom Color mapping to highlight Multimodal
+    
+    # Custom Color mapping
     color_map = {
         "Direct (Standard)": "#2F4858", 
         "Direct (Eco-Steam)": "#004e89",
         "Direct (Green Bio)": "#00CC96",
     }
-    # Dynamic color for the variable hub name
     for s in strategies:
-        if "Re-export" in s['Strategy']: color_map[s['Strategy']] = "#FF6B6B" # Highlight color
+        if "Re-export" in s['Strategy']: color_map[s['Strategy']] = "#FF6B6B"
 
     fig = px.bar(df_strat, x="Strategy", y="Net Profit", 
                  title="Net Profit by Strategy (After Tax & Opex)",
                  color="Strategy", color_discrete_map=color_map,
-                 text_auto='.2s')
+                 text_auto='.2s',
+                 template="plotly_white") # FORCES LIGHT THEME ON CHART
+    
     fig.update_layout(height=350, showlegend=False, 
                       margin=dict(l=20, r=20, t=40, b=20),
                       plot_bgcolor='rgba(0,0,0,0)')
@@ -245,8 +246,6 @@ with c2:
         **Why it wins:**
         1. **Better Trade Agreement:** Utilizing {hub_name} as a re-export hub reduced regulatory tax exposure by 30%.
         2. **Fuel Arbitrage:** Bunkering at {hub_name} was cheaper than the destination price.
-        
-        _The extra handling fees were offset by significant tax savings._
         """)
     elif "Eco-Steam" in top_strat:
         st.info("**RECOMMENDATION: SLOW STEAMING**")
@@ -259,8 +258,7 @@ with c2:
 
 # --- 5. DETAILED TABLE ---
 st.subheader("Scenario Analysis Data")
-
-# We remove .background_gradient to avoid the matplotlib error
+# Removed .background_gradient to fix the "requires matplotlib" error
 st.dataframe(
     df_strat[['Strategy', 'Details', 'Net Profit', 'TCE', 'Tax Cost', 'Total Cost']]
     .style.format({
